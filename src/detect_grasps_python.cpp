@@ -257,7 +257,7 @@ Grasp *handsToGraspsStruct(const std::vector<Hand> &hands) {
 
   for (int i = 0; i < hands.size(); i++) {
     grasps[i].pos = new double[3];
-    Eigen::Map<Eigen::Vector3d>(grasps[i].pos) = hands[i].getGraspBottom();
+    Eigen::Map<Eigen::Vector3d>(grasps[i].pos) = hands[i].getPosition();
     grasps[i].orient = new double[4];
     Eigen::Quaterniond q(hands[i].getFrame());
     Eigen::Map<Eigen::Quaterniond>(grasps[i].orient) = q;
@@ -277,7 +277,7 @@ Grasp *handsToGraspsStruct(const std::vector<Hand> &hands,
 
   for (int i = 0; i < hands.size(); i++) {
     grasps[i].pos = new double[3];
-    Eigen::Map<Eigen::Vector3d>(grasps[i].pos) = hands[i].getGraspBottom();
+    Eigen::Map<Eigen::Vector3d>(grasps[i].pos) = hands[i].getPosition();
     grasps[i].orient = new double[4];
     Eigen::Quaterniond q(hands[i].getFrame());
     Eigen::Map<Eigen::Quaterniond>(grasps[i].orient) = q;
@@ -359,7 +359,7 @@ void handToTransform4x4(const Hand &hand, cv::Mat &tf, int idx_in) {
 
   for (int j = 0; j < 3; j++) {
     idx[1] = j;
-    tf.at<float>(idx) = hand.getGraspBottom()(j);
+    tf.at<float>(idx) = hand.getPosition()(j);
   }
 }
 

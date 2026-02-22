@@ -297,7 +297,15 @@ set_target_properties(${PROJECT_NAME}_grasp_detector
   PROPERTIES OUTPUT_NAME gpd)
 
 
+# Python-callable shared library (ctypes interface for grasp_planner_gpd.py)
+add_library(gpd_python SHARED src/detect_grasps_python.cpp)
+target_link_libraries(gpd_python
+  ${PROJECT_NAME}_grasp_detector
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS})
+set_target_properties(gpd_python PROPERTIES OUTPUT_NAME gpd_python PREFIX "lib")
+
 # Set the location for library installation
-install(TARGETS ${PROJECT_NAME}_grasp_detector DESTINATION lib)
+install(TARGETS ${PROJECT_NAME}_grasp_detector gpd_python DESTINATION lib)
 
 install(DIRECTORY include/gpd DESTINATION include)
