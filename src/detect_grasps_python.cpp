@@ -12,6 +12,10 @@
 namespace gpd {
 namespace detect_grasps_python {
 
+using Cloud   = gpd::util::Cloud;
+using Hand    = gpd::candidate::Hand;
+using HandSet = gpd::candidate::HandSet;
+
 typedef pcl::PointXYZRGBA PointT;
 typedef pcl::PointCloud<PointT> PointCloudRGB;
 
