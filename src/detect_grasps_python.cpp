@@ -15,6 +15,9 @@ namespace detect_grasps_python {
 using Cloud   = gpd::util::Cloud;
 using Hand    = gpd::candidate::Hand;
 using HandSet = gpd::candidate::HandSet;
+using HandVec    = std::vector<std::unique_ptr<Hand>>;
+using HandSetVec = std::vector<std::unique_ptr<HandSet>>;
+using MatVec     = std::vector<std::unique_ptr<cv::Mat>>;
 
 typedef pcl::PointXYZRGBA PointT;
 typedef pcl::PointCloud<PointT> PointCloudRGB;
@@ -228,7 +231,7 @@ Cloud initCloud(char *pcd_filename, char *normals_filename, float *view_points,
   }
 
   // Optional: load surface normals from file.
-  if (std::string(normals_filename).size() > 0) {
+  if (normals_filename != nullptr && std::string(normals_filename).size() > 0) {
     cloud.setNormalsFromFile(normals_filename);
     printf("Loaded surface normals from file: %s\n", normals_filename);
   }
@@ -256,18 +259,18 @@ Cloud initCloud(char *pcd_filename, char *normals_filename, float *view_points,
 //  return grasps;
 //}
 
-Grasp *handsToGraspsStruct(const std::vector<Hand> &hands) {
+Grasp *handsToGraspsStruct(const HandVec &hands) {
   Grasp *grasps = new Grasp[hands.size()];
 
-  for (int i = 0; i < hands.size(); i++) {
+  for (int i = 0; i < (int)hands.size(); i++) {
     grasps[i].pos = new double[3];
-    Eigen::Map<Eigen::Vector3d>(grasps[i].pos) = hands[i].getPosition();
+    Eigen::Map<Eigen::Vector3d>(grasps[i].pos) = hands[i]->getPosition();
     grasps[i].orient = new double[4];
-    Eigen::Quaterniond q(hands[i].getFrame());
+    Eigen::Quaterniond q(hands[i]->getFrame());
     Eigen::Map<Eigen::Quaterniond>(grasps[i].orient) = q;
     grasps[i].sample = new double[3];
-    grasps[i].score = hands[i].getScore();
-    grasps[i].label = hands[i].isFullAntipodal();
+    grasps[i].score = hands[i]->getScore();
+    grasps[i].label = hands[i]->isFullAntipodal();
     grasps[i].image = new int[0];
     grasps[i].image[0] = -1;
   }
@@ -275,21 +278,20 @@ Grasp *handsToGraspsStruct(const std::vector<Hand> &hands) {
   return grasps;
 }
 
-Grasp *handsToGraspsStruct(const std::vector<Hand> &hands,
-                           const std::vector<cv::Mat> &images) {
+Grasp *handsToGraspsStruct(const HandVec &hands, const MatVec &images) {
   Grasp *grasps = new Grasp[hands.size()];
 
-  for (int i = 0; i < hands.size(); i++) {
+  for (int i = 0; i < (int)hands.size(); i++) {
     grasps[i].pos = new double[3];
-    Eigen::Map<Eigen::Vector3d>(grasps[i].pos) = hands[i].getPosition();
+    Eigen::Map<Eigen::Vector3d>(grasps[i].pos) = hands[i]->getPosition();
     grasps[i].orient = new double[4];
-    Eigen::Quaterniond q(hands[i].getFrame());
+    Eigen::Quaterniond q(hands[i]->getFrame());
     Eigen::Map<Eigen::Quaterniond>(grasps[i].orient) = q;
     grasps[i].sample = new double[3];
-    grasps[i].score = hands[i].getScore();
-    grasps[i].label = hands[i].isFullAntipodal();
+    grasps[i].score = hands[i]->getScore();
+    grasps[i].label = hands[i]->isFullAntipodal();
     printf("i: %d\n", i);
-    grasps[i].image = cvMatToArray(images[0]);  // new
+    grasps[i].image = cvMatToArray(*images[0]);  // new
     // int[images[i].rows*images[i].cols*images[i].channels()];
     //    int* img = cvMatToArray(images[0]);
     //    grasps[i].image = img;
@@ -299,32 +301,32 @@ Grasp *handsToGraspsStruct(const std::vector<Hand> &hands,
   return grasps;
 }
 
-std::vector<Hand> detectGrasps(const std::string &config_filename,
-                               Cloud &cloud_cam) {
+HandVec detectGrasps(const std::string &config_filename, Cloud &cloud_cam) {
   // Preprocess the point cloud.
   GraspDetector detector(config_filename);
   detector.preprocessPointCloud(cloud_cam);
 
   // Detect grasps.
-  std::vector<Hand> hands = detector.detectGrasps(cloud_cam);
+  HandVec hands = detector.detectGrasps(cloud_cam);
 
   return hands;
 }
 
-std::vector<Hand> generateGraspCandidates(const std::string &config_filename,
-                                          Cloud &cloud_cam) {
+HandVec generateGraspCandidates(const std::string &config_filename,
+                                Cloud &cloud_cam) {
   // Preprocess the point cloud.
   GraspDetector detector(config_filename);
   detector.preprocessPointCloud(cloud_cam);
 
   // Generate grasp candidates.
-  std::vector<HandSet> hand_sets = detector.generateGraspCandidates(cloud_cam);
+  HandSetVec hand_sets = detector.generateGraspCandidates(cloud_cam);
 
-  std::vector<Hand> hands;
-  for (int i = 0; i < hand_sets.size(); i++) {
-    for (int j = 0; j < hand_sets[i].getHands().size(); j++) {
-      if (hand_sets[i].getIsValid()[j]) {
-        hands.push_back(hand_sets[i].getHands()[j]);
+  HandVec hands;
+  for (int i = 0; i < (int)hand_sets.size(); i++) {
+    auto &hs_hands = hand_sets[i]->getHands();
+    for (int j = 0; j < (int)hs_hands.size(); j++) {
+      if (hand_sets[i]->getIsValid()[j]) {
+        hands.push_back(std::move(hs_hands[j]));
       }
     }
   }
@@ -374,8 +376,8 @@ bool calcDescriptorsHelper(Cloud &cloud, GraspDetector &detector,
   const std::string WIDTHS_DS_NAME = "widths";
 
   // Calculate grasps and grasp descriptors.
-  std::vector<Hand> hands;
-  std::vector<cv::Mat> images;
+  HandVec hands;
+  MatVec images;
   bool found_hands = detector.createGraspImages(cloud, hands, images);
 
   if (not found_hands) {
@@ -384,22 +386,22 @@ bool calcDescriptorsHelper(Cloud &cloud, GraspDetector &detector,
 
   // Store the grasps and the grasp descriptors in a HDF5 file.
   int n_dims = 3;
-  int dsdims_images[n_dims] = {images.size(), images[0].rows, images[0].cols};
-  cv::Mat images_mat(n_dims, dsdims_images, CV_8UC(images[0].channels()),
+  int dsdims_images[n_dims] = {(int)images.size(), images[0]->rows, images[0]->cols};
+  cv::Mat images_mat(n_dims, dsdims_images, CV_8UC(images[0]->channels()),
                      cv::Scalar(0.0));
 
-  int dsdims_hands[n_dims] = {hands.size(), 4, 4};
+  int dsdims_hands[n_dims] = {(int)hands.size(), 4, 4};
   cv::Mat hands_mat(n_dims, dsdims_hands, CV_32FC1, cv::Scalar(0.0));
 
   int n_dims_widths = 1;
-  int dsdims_widths[n_dims_widths] = {hands.size()};
+  int dsdims_widths[n_dims_widths] = {(int)hands.size()};
   cv::Mat gripper_widths_mat(n_dims_widths, dsdims_widths, CV_32FC1,
                              cv::Scalar(0.0));
 
-  for (int i = 0; i < images.size(); i++) {
-    copyImageMatrix(images[i], images_mat, i);
-    handToTransform4x4(hands[i], hands_mat, i);
-    gripper_widths_mat.at<float>(i) = hands[i].getGraspWidth();
+  for (int i = 0; i < (int)images.size(); i++) {
+    copyImageMatrix(*images[i], images_mat, i);
+    handToTransform4x4(*hands[i], hands_mat, i);
+    gripper_widths_mat.at<float>(i) = hands[i]->getGraspWidth();
 
     // ranges don't seem to work
     //    std::vector<cv::Range> ranges;
@@ -414,7 +416,7 @@ bool calcDescriptorsHelper(Cloud &cloud, GraspDetector &detector,
 
   cv::Ptr<cv::hdf::HDF5> h5io = cv::hdf::open(filename_out);
   printf("Storing dataset %s ...\n", IMAGES_DS_NAME.c_str());
-  h5io->dscreate(n_dims, dsdims_images, CV_8UC(images[0].channels()),
+  h5io->dscreate(n_dims, dsdims_images, CV_8UC(images[0]->channels()),
                  IMAGES_DS_NAME, compress_level);
   h5io->dswrite(images_mat, IMAGES_DS_NAME);
 
@@ -441,7 +443,7 @@ extern "C" int detectGraspsInCloud(char *config_filename, float *points,
 
   // Detect grasp affordances.
   std::string config_filename_str = config_filename;
-  std::vector<Hand> hands = detectGrasps(config_filename_str, cloud);
+  HandVec hands = detectGrasps(config_filename_str, cloud);
 
   // Convert output to array of structs.
   *grasps_out = handsToGraspsStruct(hands);
@@ -460,7 +462,7 @@ extern "C" int detectGraspsInCloudNormals(char *config_filename, float *points,
 
   // Detect grasp affordances.
   std::string config_filename_str = config_filename;
-  std::vector<Hand> hands = detectGrasps(config_filename_str, cloud);
+  HandVec hands = detectGrasps(config_filename_str, cloud);
 
   // Convert output to array of structs.
   *grasps_out = handsToGraspsStruct(hands);
@@ -482,7 +484,7 @@ extern "C" int detectGraspsInFile(char *config_filename, char *pcd_filename,
 
   // Detect grasp affordances.
   std::string config_filename_str = config_filename;
-  std::vector<Hand> hands = detectGrasps(config_filename_str, cloud);
+  HandVec hands = detectGrasps(config_filename_str, cloud);
 
   // Convert output to array of structs.
   *grasps_out = handsToGraspsStruct(hands);
@@ -508,8 +510,8 @@ extern "C" int detectAndEvalGrasps(char *config_filename, float *points,
   detector.preprocessPointCloud(cloud);
 
   // Generate grasp candidates.
-  std::vector<Hand> hands;
-  std::vector<cv::Mat> images;
+  HandVec hands;
+  MatVec images;
   bool found_hands = detector.createGraspImages(cloud, hands, images);
   if (found_hands == false) {
     printf("No grasps found!\n");
@@ -518,12 +520,12 @@ extern "C" int detectAndEvalGrasps(char *config_filename, float *points,
   printf("Created %d grasps and %d images.\n", (int)hands.size(),
          (int)images.size());
 
-  // Evaluate candidates against ground truth.
-  std::vector<Hand> labeled_hands = detector.evalGroundTruth(mesh_cloud, hands);
+  // Evaluate candidates against ground truth (labels applied in-place).
+  detector.evalGroundTruth(mesh_cloud, hands);
   printf("Done!!\n");
 
   // Convert output to array of structs.
-  *grasps_out = handsToGraspsStruct(labeled_hands, images);
+  *grasps_out = handsToGraspsStruct(hands, images);
   int num_out = (int)hands.size();
 
   printf("%d\n", num_out);
@@ -543,7 +545,7 @@ extern "C" int generateGraspCandidatesInFile(
 
   // Detect grasp affordances.
   std::string config_filename_str = config_filename;
-  std::vector<Hand> hands = generateGraspCandidates(config_filename_str, cloud);
+  HandVec hands = generateGraspCandidates(config_filename_str, cloud);
 
   // Convert output to array of structs.
   *grasps_out = handsToGraspsStruct(hands);
